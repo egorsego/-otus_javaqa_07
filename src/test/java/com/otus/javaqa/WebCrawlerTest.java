@@ -1,9 +1,8 @@
+package com.otus.javaqa;
+
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import org.junit.*;
 import org.openqa.selenium.*;
@@ -11,18 +10,17 @@ import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
-public class WebCrawlerTest {
-    private static final Logger logger = LogManager.getLogger(WebCrawlerTest.class);
-    private static WebDriver driver;
-    private static WebDriverWait wait;
-    private static Actions actions;
-    private static final long TIMEOUT = 10;
-    private static final String START_PAGE = "https://www.podpisnie.ru/";
-    private static final String FILE_NAME = "books.csv";
-    private static String originalTabHandle;
+import static com.otus.javaqa.Constants.*;
 
-    @BeforeClass
-    public static void generalSetup(){
+public class WebCrawlerTest {
+
+    private WebDriver driver;
+    private WebDriverWait wait;
+    private Actions actions;
+    private String originalTabHandle;
+
+    @Before
+    public void setup(){
         driver = WebDriverFactory.createDriver(WebDriverType.valueOf("CHROME"));
         wait = new WebDriverWait(driver, TIMEOUT);
         actions = new Actions(driver);
@@ -35,8 +33,8 @@ public class WebCrawlerTest {
         confirmLocation();
     }
 
-    @AfterClass
-    public static void teardown(){
+    @After
+    public void teardown(){
         if (driver != null) {
             driver.quit();
         }
@@ -44,45 +42,25 @@ public class WebCrawlerTest {
 
     @Test
     public void bookScrapingTest(){
-        openForeignLanguageBooksSection();
         scrapeAllBooks();
     }
 
-    public static void confirmLocation(){
+    public void confirmLocation(){
         wait.until(ExpectedConditions.elementToBeClickable(By.cssSelector("div.current-location button")));
         driver.findElement(By.xpath("//div[@class='current-location']/button[text()='Да']")).click();
     }
 
-    public static void openForeignLanguageBooksSection(){
-        WebElement booksMainSection = driver.findElement(By.xpath("//div[@class='nav-main-left']//a[text()='Книги']"));
-        actions.moveToElement(booksMainSection).perform();
-        driver.findElement(By.xpath("//div[@class='nav-main-left']//a[text()='Книги на иностранных языках']")).click();
-        wait.until(ExpectedConditions.visibilityOfAllElementsLocatedBy(By.cssSelector("div.catalog-list-cards div.catalog-list-card")));
-    }
-
-    public static int getCurrentPageNumber(){
-        wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("div.pagination li.is-active span")));
-        String currentPage = driver.findElement(By.cssSelector("div.pagination li.is-active span")).getAttribute("textContent");
-        return Integer.parseInt(currentPage);
-    }
-
-    public static int getLastPageNumber(){
+    public int getLastPageNumber(){
         wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("ul.pagination-left li:last-child")));
         String lastPage = driver.findElement(By.cssSelector("ul.pagination-left li:last-child")).getAttribute("textContent");
         return Integer.parseInt(lastPage);
     }
 
-    public static void openNextPage(){
-        wait.until(ExpectedConditions.elementToBeClickable(By.cssSelector("ul.pagination-right a")));
-        driver.findElement(By.cssSelector("ul.pagination-right li:last-child a")).click();
-        wait.until(ExpectedConditions.visibilityOfAllElementsLocatedBy(By.cssSelector("div.catalog-list-cards div.catalog-list-card")));
-    }
-
-    public static String getCurrentWindowHandle(){
+    public String getCurrentWindowHandle(){
         return driver.getWindowHandle();
     }
 
-    public static void switchToSecondaryTab(){
+    public void switchToSecondaryTab(){
         for(String handle : driver.getWindowHandles()){
             if(!handle.equals(originalTabHandle)){
                 driver.switchTo().window(handle);
@@ -91,30 +69,29 @@ public class WebCrawlerTest {
         }
     }
 
-    public static void scrapeAllBooks(){
+    public void scrapeAllBooks(){
         int totalNumberOfPages = getLastPageNumber();
-        logger.info("Total number of pages: " + totalNumberOfPages);
+        LOGGER.info("Total number of pages: " + totalNumberOfPages);
 
         try (PrintWriter csvWriter = getPrintWriterInstance()){
             csvWriter.append("\"Title\";\"Author\";\"Description\";\"Publisher\";\"Published, year\";\"Language\";\"Number of Pages\";\"Price, rub\";\"URL\"\n");
 
-            while (getCurrentPageNumber() <= totalNumberOfPages) {
+            for(int i = 1; i < totalNumberOfPages; i++){
                 List<WebElement> booksOnCurrentPage = driver.findElements(By.cssSelector("div.catalog-list-cards div.catalog-list-card"));
-                logger.info(String.format("Number of books on page %d: %d", getCurrentPageNumber(), booksOnCurrentPage.size()));
+                LOGGER.info("Number of books on page {}: {}", i, booksOnCurrentPage.size());
 
                 for (WebElement book : booksOnCurrentPage) {
                     String bookLink = book.findElement(By.cssSelector("div.catalog-list-card-image a")).getAttribute("href");
-                    logger.debug("Current book URL: " + bookLink);
+                    LOGGER.debug("Current book URL: " + bookLink);
                     switchToSecondaryTab();
                     driver.get(bookLink);
-                    wait.until(ExpectedConditions.visibilityOfAllElementsLocatedBy(By.cssSelector("div.catalog-detail-item")));
 
                     String author, bookTitle, description, publisher, published, language, numberOfPages, price;
 
                     author = getWebElementTextContent(By.cssSelector("div.catalog-detail-header-author a"));
                     bookTitle = getWebElementTextContent(By.cssSelector("div.catalog-detail-header-title h1"));
                     description = getWebElementTextContent(By.cssSelector("div.catalog-detail-tabs-content-item"));
-                    publisher = getWebElementTextContent(By.xpath("//div[@class='catalog-detail-item']/span[text()='Издательство']/following-sibling::span"));
+                    publisher = getWebElementTextContent(By.xpath("//div[@class='catalog-detail-item']/span[text()='Издательство']/following-sibling::a"));
                     published = getWebElementTextContent(By.xpath("//div[@class='catalog-detail-item']/span[text()='Год издания']/following-sibling::span"));
                     language = getWebElementTextContent(By.xpath("//div[@class='catalog-detail-item']/span[text()='Язык']/following-sibling::span"));
                     numberOfPages = getWebElementTextContent(By.xpath("//div[@class='catalog-detail-item']/span[text()='Количество страниц']/following-sibling::span"));
@@ -125,12 +102,12 @@ public class WebCrawlerTest {
 
                     driver.switchTo().window(originalTabHandle);
                 }
-                openNextPage();
+                driver.get(START_PAGE + "?page=" + (i+1));
             }
         }
     }
 
-    public static PrintWriter getPrintWriterInstance() {
+    public PrintWriter getPrintWriterInstance() {
         OutputStream os = null;
         // код ниже необходим для корректного отображения кирилических символов в .csv файле
         try {
@@ -141,18 +118,17 @@ public class WebCrawlerTest {
         } catch (IOException e) {
             e.printStackTrace();
         }
-
         return new PrintWriter(new OutputStreamWriter(os, StandardCharsets.UTF_8));
     }
 
-    public static String getWebElementTextContent(final By locator){
+    public String getWebElementTextContent(final By locator){
         String textContent;
         try {
             WebElement we = driver.findElement((locator));
             textContent = we.getAttribute("textContent").trim();
         } catch (NoSuchElementException e){
             textContent = "Not Available";
-            logger.debug("Element not found with locator: " + locator.toString());
+            LOGGER.debug("Element not found : " + locator.toString());
         }
         return textContent;
     }
